@@ -1,0 +1,98 @@
+import pymysql
+import pandas as pd
+
+connection = pymysql.connect(
+    host="gateway01.ap-southeast-1.prod.aws.tidbcloud.com",
+    user="3843tbpvmio3tiw.root",
+    password="BvhwR5z1itdG9CMJ",
+    database="cricsheet",
+    port=4000,
+    ssl={"ca": "D:\\GUVI\\Cricsheet\\isrgrootx1.pem"},
+    connect_timeout=600
+)
+
+cursor = connection.cursor()
+
+TABLE = '''CREATE TABLE IF NOT EXISTS ODI (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `city` VARCHAR(200),
+    `event` VARCHAR(200),
+    `match_type` VARCHAR(100),
+    `venue` VARCHAR(200),
+    `match_referees` VARCHAR(300),
+    `tv_umpires` VARCHAR(300),
+    `reserve_umpires` VARCHAR(300),
+    `result` VARCHAR(200),
+    `teams` VARCHAR(200),
+    `toss_winner` VARCHAR(100),
+    `toss_decision` VARCHAR(100),
+    `match_date` DATE,
+    `man_of_the_match` VARCHAR(100),
+    `player_id` VARCHAR(200),
+    `player_name` VARCHAR(200),
+    `bowler` VARCHAR(200),
+    `team_name` VARCHAR(200),
+    `opponent_team` VARCHAR(200),
+    `runs_scored` INT,
+    `balls_faced` INT,
+    `fours` INT,
+    `sixes` INT,
+    `dismissal_kind` VARCHAR(200),
+    `balls_bowled` INT,
+    `runs_conceded` INT,
+    `wickets_taken` INT,
+    `dot_balls` INT,
+    `no_balls` INT,
+    `wides` INT,
+    `winning_team` VARCHAR(200),
+    `losing_team` VARCHAR(200),
+    `win_category` VARCHAR(200),
+    `inning_number` INT,
+    `strike_rate` FLOAT,
+    `bowler_economy` FLOAT,
+    `dismissal_player` VARCHAR(100),
+    `dismissal_fielders` VARCHAR(200),
+    `year` INT,
+    `Year_Month` VARCHAR(100)    
+) DEFAULT CHARSET=utf8mb4'''
+
+try:
+    cursor.execute(TABLE)
+    connection.commit()
+    print("Table created successfully")
+except pymysql.Error as e:
+    print(f"Error creating table: {e}")
+finally:
+    cursor.close()
+    connection.close()
+
+INSERT_QUERY =  """INSERT  IGNORE INTO ODI (
+    city, event, match_type, venue, match_referees, tv_umpires, reserve_umpires, 
+    result, teams, toss_winner, toss_decision, match_date, man_of_the_match, 
+    player_id, player_name, bowler, team_name, opponent_team, runs_scored, balls_faced, 
+    fours, sixes, dismissal_kind, balls_bowled, runs_conceded, wickets_taken, 
+    dot_balls, no_balls, wides, winning_team, losing_team, win_category, 
+    inning_number, strike_rate, bowler_economy, dismissal_player, dismissal_fielders, `year`, `Year_Month`
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+"""
+
+
+df = pd.read_csv("ODI.csv", low_memory=False)
+
+
+df["match_date"] = pd.to_datetime(df["match_date"], format = "%Y-%m-%d")
+
+
+list_tuples = [tuple(row) for row in df.itertuples(index=False, name=None)]
+batch_size = 10000
+for i in range(0, len(list_tuples), batch_size):
+        batch = list_tuples[i:i + batch_size]
+        cursor.executemany(INSERT_QUERY, batch)
+        connection.commit()
+
+cursor.close()
+connection.close()
+
+

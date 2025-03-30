@@ -1,0 +1,139 @@
+import os
+import json
+import pandas as pd
+import hashlib
+import numpy as np
+
+temp = r"D:\GUVI\Cricsheet\odis_json"
+
+data_list = []
+
+def generate_player_id(player_name):
+    return hashlib.md5(player_name.encode()).hexdigest()[:10] if player_name else "Unknown"
+
+if os.path.exists(temp):
+    for i in os.listdir(temp):
+        if i.endswith(".json"):
+            file_path = os.path.join(temp, i)
+            
+            with open(file_path, "r") as file:
+                data = json.load(file)
+            
+            info = data.get("info", {})
+            
+            teams_list = info.get("teams", [])
+            if len(teams_list) == 2:
+                team1, team2 = teams_list
+            else:
+                team1, team2 = "Unknown", "Unknown"
+
+            winner = info.get("outcome", {}).get("winner", "Unknown")
+            
+            if winner == team1:
+                losing_team = team2
+            elif winner == team2:
+                losing_team = team1
+            else:
+                losing_team = "Unknown"    
+
+            static_data = {  
+                "city": info.get("city", ""),
+                "event": info.get("event", {}).get("name", ""),                
+                "match_type": info.get("match_type", ""),
+                "venue": info.get("venue", ""),
+                "match_referees": ", ".join(info.get("officials", {}).get("match_referees", [])),
+                "tv_umpires": ", ".join(info.get("officials", {}).get("tv_umpires", [])),
+                "reserve_umpires": ", ".join(info.get("officials", {}).get("reserve_umpires", [])),
+                "result": info.get("outcome", {}).get("winner", info.get("outcome", {}).get("result", "Unknown")),
+                "teams": " vs ".join(info.get("teams", [])),    
+                "toss_winner": info.get("toss", {}).get("winner", ""),
+                "toss_decision": info.get("toss", {}).get("decision", ""),
+                "match_date": info.get("dates", ["Unknown"])[0],
+                "man_of_the_match": ", ".join(info.get("player_of_match", [])) if info.get("player_of_match") else "Not Awarded"
+            }
+            
+            for inning_number, inning in enumerate(data.get("innings", []), start=1):
+                team = inning.get("team", "")
+                opponent_team = team2 if team == team1 else team1 if team else "Unknown"
+                
+                for j in inning.get("overs", []):
+                    over_number = j.get("over", 0)
+                    for delivery in j.get("deliveries", []):
+                        batter = delivery.get("batter", "")
+                        bowler = delivery.get("bowler", "")
+
+                        runs_scored = delivery.get("runs", {}).get("batter", 0)
+                        balls_faced = 1  
+                        balls_bowled = 1
+                        runs_conceded = delivery.get("runs", {}).get("total", 0)
+                        
+                        dynamic_data = {
+                            "player_id": generate_player_id(batter),
+                            "player_name": batter,
+                            "bowler": bowler,
+                            "match_date": static_data["match_date"],
+                            "team_name": team,
+                            "opponent_team": opponent_team,
+                            "runs_scored": runs_scored,
+                            "balls_faced": balls_faced,
+                            "fours": 1 if runs_scored == 4 else 0,
+                            "sixes": 1 if runs_scored == 6 else 0,
+                            "dismissal_kind": delivery.get("dismissal_kind", ""),
+                            "balls_bowled": balls_bowled,
+                            "runs_conceded": runs_conceded,
+                            "wickets_taken": len(delivery.get("wickets", [])) if "wickets" in delivery else 0,
+                            "dot_balls": 1 if runs_conceded == 0 else 0,
+                            "no_balls": delivery.get("extras", {}).get("noballs", 0),
+                            "wides": delivery.get("extras", {}).get("wides", 0),
+                            "winning_team": static_data["result"],
+                            "losing_team": opponent_team if static_data["result"] == team else team,                            
+                            "win_category": "First Batting" if static_data["toss_decision"] == "bat" else "Chasing",
+                            "toss_winner": static_data["toss_winner"],
+                            "toss_decision": static_data["toss_decision"],
+                            "man_of_the_match": static_data["man_of_the_match"],
+                            "inning_number": inning_number,
+                            "strike_rate": (runs_scored / balls_faced) * 100 if balls_faced > 0 else 0,
+                            "bowler_economy": (runs_conceded / (balls_bowled / 6)) if balls_bowled > 0 else 0,
+                        }
+                        
+                        if "wickets" in delivery:
+                            for wicket in delivery["wickets"]:
+                                fielders_names = ", ".join([f.get("name", "") for f in wicket.get("fielders", []) if f.get("name", "")])
+                                dynamic_data.update({
+                                    "dismissal_kind": wicket.get("kind", ""),
+                                    "dismissal_player": wicket.get("player_out", ""),
+                                    "dismissal_fielders": fielders_names,
+                                })
+                        
+                        combined_data = {**static_data, **dynamic_data}
+                        data_list.append(combined_data)
+
+    df1 = pd.DataFrame(data_list)
+    df1["Year"] = pd.to_datetime(df1["match_date"]).dt.year
+    df1["Year_Month"] = pd.to_datetime(df1["match_date"]).dt.strftime("%Y-%m")
+
+    string_columns = [
+        "city", "event","venue", "match_referees", "tv_umpires", "reserve_umpires",
+        "result", "teams", "toss_winner", "toss_decision","man_of_the_match", "player_id" ,"player_name","bowler", "team_name",
+        "opponent_team", "dismissal_kind", "winning_team", "losing_team", "win_category","dismissal_player",
+        "dismissal_fielders","Year_Month"]
+
+    integer_columns = ["runs_scored","balls_faced","fours","sixes","balls_bowled","runs_conceded","wickets_taken",
+                    "dot_balls","no_balls","wides","Year"]
+    
+    float_columns = ["strike_rate", "bowler_economy"]
+
+
+    df1[string_columns] = df1[string_columns].replace("", np.nan)
+    df1[integer_columns] = df1[integer_columns].replace("", np.nan)
+    df1[float_columns] = df1[float_columns].replace("", np.nan)
+
+    df1[string_columns] = df1[string_columns].fillna("Unknown")
+    df1[integer_columns] = df1[integer_columns].fillna(0).astype(int)
+    df1[float_columns] = df1[float_columns].fillna(0.0).astype(float)
+
+
+    df1.to_csv("ODI.csv", index=False, na_rep="NULL")
+    print("Data extraction complete! CSV file saved.")
+else:
+    print(f"Folder not found: {temp}")
