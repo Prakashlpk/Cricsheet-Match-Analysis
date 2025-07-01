@@ -7,7 +7,7 @@ connection = pymysql.connect(
     password="",
     database="cricsheet",
     port=4000,
-    ssl={"ca": "D:\\GUVI\\Cricsheet\\isrgrootx1.pem"},
+    ssl={"ca": "D:\Cricsheet\\isrgrootx1.pem"},
     connect_timeout=600
 )
 
