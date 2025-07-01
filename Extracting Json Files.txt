@@ -4,7 +4,7 @@ import pandas as pd
 import hashlib
 import numpy as np
 
-temp = r"D:\GUVI\Cricsheet\odis_json"
+temp = r"D:\Cricsheet\odis_json"
 
 data_list = []
 
